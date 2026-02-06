@@ -61,7 +61,7 @@ That's it. 30 seconds to voice typing.
 | | Feature | Description |
 |---|---------|-------------|
 | **Speed** | < 1 second latency | Groq's Whisper API is blazing fast |
-| **Smart** | AI text cleanup | Fixes grammar, removes "um", "uh", "like" |
+| **Smart** | Filler removal | Auto-removes "um", "uh", "like", "you know" |
 | **Free** | No credit card | Groq's free tier is generous |
 | **Offline** | Local fallback | Works without internet via faster-whisper |
 | **Private** | Privacy mode | Keep voice 100% on your machine |
@@ -80,7 +80,7 @@ That's it. 30 seconds to voice typing.
                             v
                    ┌─────────────────┐
                    │  Groq Whisper   │
-                   │  + LLM cleanup  │
+                   │ + filler removal│
                    └─────────────────┘
 ```
 
@@ -182,7 +182,7 @@ systemctl --user daemon-reload
 ## Tech Stack
 
 - **STT:** [Groq Whisper API](https://groq.com) / [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
-- **LLM:** Llama 3.1 8B (via Groq) for text cleanup
+- **Cleanup:** Regex-based filler word removal (no extra API calls)
 - **Audio:** [sounddevice](https://python-sounddevice.readthedocs.io/)
 - **Hotkeys:** [pynput](https://pynput.readthedocs.io/)
 - **CLI:** [Rich](https://rich.readthedocs.io/)
