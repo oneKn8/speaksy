@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "speaksy"
-version = "0.1.1"
+name = "undertone"
+version = "0.2.0"
 description = "Voice typing for Linux. Talk it. Type it. Ship it."
 readme = "README.md"
 license = "MIT"
@@ -41,12 +41,12 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/oneKn8/speaksy"
-Repository = "https://github.com/oneKn8/speaksy"
-Issues = "https://github.com/oneKn8/speaksy/issues"
+Homepage = "https://github.com/oneKn8/undertone"
+Repository = "https://github.com/oneKn8/undertone"
+Issues = "https://github.com/oneKn8/undertone/issues"
 
 [project.scripts]
-speaksy = "speaksy.cli:main"
+undertone = "undertone.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/speaksy"]
+packages = ["src/undertone"]

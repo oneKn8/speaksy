@@ -1,15 +1,14 @@
 """Runner module for systemd service."""
 
 import logging
-import os
 import sys
 
-from speaksy.config import get_api_key, load_config
-from speaksy.core import SpeaksyEngine
+from undertone.config import get_api_key, load_config
+from undertone.core import UndertoneEngine
 
 
 def main():
-    """Run the speaksy engine."""
+    """Run the undertone engine."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
@@ -20,10 +19,10 @@ def main():
     api_key = get_api_key()
 
     if not api_key:
-        logging.error("No API key configured. Run 'speaksy' to set up.")
+        logging.error("No API key configured. Run 'undertone' to set up.")
         sys.exit(1)
 
-    engine = SpeaksyEngine(config, api_key=api_key)
+    engine = UndertoneEngine(config, api_key=api_key)
     engine.run()
 
 

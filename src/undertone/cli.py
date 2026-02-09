@@ -1,4 +1,4 @@
-"""Interactive CLI for Speaksy."""
+"""Interactive CLI for Undertone."""
 
 import sys
 
@@ -7,19 +7,19 @@ from rich.panel import Panel
 from rich.prompt import Prompt, Confirm
 from rich.table import Table
 
-from speaksy import __version__
-from speaksy import config
-from speaksy import service
-from speaksy.setup_wizard import run_setup
+from undertone import __version__
+from undertone import config
+from undertone import service
+from undertone.setup_wizard import run_setup
 
 console = Console()
 
 
 def print_banner():
-    """Print the speaksy banner."""
+    """Print the undertone banner."""
     banner = """
   [bold cyan]╭────────────────────────────────────────╮[/bold cyan]
-  [bold cyan]│[/bold cyan]  [bold white]SPEAKSY[/bold white]                              [bold cyan]│[/bold cyan]
+  [bold cyan]│[/bold cyan]  [bold white]UNDERTONE[/bold white]                            [bold cyan]│[/bold cyan]
   [bold cyan]│[/bold cyan]  [dim]talk it. type it. ship it.[/dim]           [bold cyan]│[/bold cyan]
   [bold cyan]╰────────────────────────────────────────╯[/bold cyan]
 """
@@ -80,7 +80,7 @@ def cmd_start():
 
     console.print("[dim]starting...[/dim]")
     if service.start_service():
-        console.print("[green]lesss gooo! speaksy is now listening...[/green]")
+        console.print("[green]lesss gooo! undertone is now listening...[/green]")
         ptt, toggle = config.get_hotkeys()
         ptt_display = ptt.replace("Key.", "").replace("_", " ").title()
         toggle_display = toggle.replace("Key.", "").upper()
@@ -98,7 +98,7 @@ def cmd_stop():
 
     console.print("[dim]stopping...[/dim]")
     if service.stop_service():
-        console.print("[yellow]aight speaksy is taking a nap. run /start when you need me[/yellow]")
+        console.print("[yellow]aight undertone is taking a nap. run /start when you need me[/yellow]")
     else:
         console.print("[red]couldn't stop the service[/red]")
 
@@ -112,22 +112,22 @@ def cmd_status():
 
     if status["running"]:
         uptime = status.get("uptime", "unknown")
-        console.print(f"   [green]├─ service: running for {uptime}[/green]")
+        console.print(f"   [green]|- service: running for {uptime}[/green]")
     elif status["installed"]:
-        console.print("   [yellow]├─ service: stopped[/yellow]")
+        console.print("   [yellow]|- service: stopped[/yellow]")
     else:
-        console.print("   [red]├─ service: not installed[/red]")
+        console.print("   [red]|- service: not installed[/red]")
 
     if config.api_key_exists():
-        console.print("   [green]├─ api key: configured ✓[/green]")
+        console.print("   [green]|- api key: configured[/green]")
     else:
-        console.print("   [red]├─ api key: not set[/red]")
+        console.print("   [red]|- api key: not set[/red]")
 
     mode = config.get_privacy_mode()
     if mode == "local":
-        console.print("   [cyan]└─ mode: local (privacy mode)[/cyan]")
+        console.print("   [cyan]'- mode: local (privacy mode)[/cyan]")
     else:
-        console.print("   [green]└─ mode: cloud (groq)[/green]")
+        console.print("   [green]'- mode: cloud (groq)[/green]")
 
     console.print()
 
@@ -151,17 +151,18 @@ def cmd_config():
     console.print("  2. Hotkeys")
     console.print("  3. Privacy mode (cloud/local)")
     console.print("  4. Text cleanup on/off")
-    console.print("  5. Back")
+    console.print("  5. LLM grammar fix on/off")
+    console.print("  6. Back")
     console.print()
 
-    choice = Prompt.ask("[cyan]pick one[/cyan]", choices=["1", "2", "3", "4", "5"], default="5")
+    choice = Prompt.ask("[cyan]pick one[/cyan]", choices=["1", "2", "3", "4", "5", "6"], default="6")
 
     if choice == "1":
         console.print()
         new_key = Prompt.ask("[cyan]new API key[/cyan]", password=True)
         if new_key:
             config.save_api_key(new_key)
-            console.print("[green]saved ✓[/green]")
+            console.print("[green]saved[/green]")
             if service.is_running():
                 service.restart_service()
                 console.print("[dim]service restarted[/dim]")
@@ -175,7 +176,7 @@ def cmd_config():
         new_toggle = Prompt.ask(f"[cyan]toggle[/cyan]", default=toggle)
 
         config.set_hotkeys(new_ptt, new_toggle)
-        console.print("[green]saved ✓[/green]")
+        console.print("[green]saved[/green]")
 
         if service.is_running():
             service.restart_service()
@@ -210,7 +211,20 @@ def cmd_config():
 
         new_state = Confirm.ask("[cyan]enable text cleanup?[/cyan]", default=current)
         config.set_cleanup_enabled(new_state)
-        console.print(f"[green]cleanup {'enabled' if new_state else 'disabled'} ✓[/green]")
+        console.print(f"[green]cleanup {'enabled' if new_state else 'disabled'}[/green]")
+
+        if service.is_running():
+            service.restart_service()
+
+    elif choice == "5":
+        console.print()
+        current = config.get_cleanup_llm_enabled()
+        console.print(f"[dim]currently: {'on' if current else 'off'}[/dim]")
+        console.print("[dim]uses Groq LLM to fix grammar and punctuation[/dim]")
+
+        new_state = Confirm.ask("[cyan]enable LLM grammar fix?[/cyan]", default=current)
+        config.set_cleanup_llm_enabled(new_state)
+        console.print(f"[green]LLM grammar fix {'enabled' if new_state else 'disabled'}[/green]")
 
         if service.is_running():
             service.restart_service()
@@ -221,7 +235,7 @@ def cmd_config():
 def cmd_help():
     """Show help."""
     console.print()
-    console.print("[bold]speaksy commands:[/bold]")
+    console.print("[bold]undertone commands:[/bold]")
     console.print()
 
     table = Table(show_header=False, box=None, padding=(0, 2))
@@ -260,13 +274,13 @@ def run_repl():
 
     while True:
         try:
-            user_input = Prompt.ask("[bold magenta]speaksy>[/bold magenta]").strip().lower()
+            user_input = Prompt.ask("[bold magenta]undertone>[/bold magenta]").strip().lower()
 
             if not user_input:
                 continue
 
             if user_input in ("/quit", "/exit", "/q"):
-                console.print("[dim]peace out ✌️[/dim]")
+                console.print("[dim]peace out[/dim]")
                 break
 
             if user_input in commands:
@@ -279,7 +293,7 @@ def run_repl():
 
         except KeyboardInterrupt:
             console.print()
-            console.print("[dim]peace out ✌️[/dim]")
+            console.print("[dim]peace out[/dim]")
             break
         except EOFError:
             break

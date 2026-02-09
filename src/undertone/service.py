@@ -1,25 +1,23 @@
-"""Systemd service management for Speaksy."""
+"""Systemd service management for Undertone."""
 
-import os
-import shutil
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
 
-from speaksy.config import CONFIG_DIR, ENV_FILE
+from undertone.config import CONFIG_DIR, ENV_FILE
 
 SYSTEMD_USER_DIR = Path.home() / ".config" / "systemd" / "user"
-SERVICE_FILE = SYSTEMD_USER_DIR / "speaksy.service"
+SERVICE_FILE = SYSTEMD_USER_DIR / "undertone.service"
 
 SERVICE_TEMPLATE = """[Unit]
-Description=Speaksy - Voice Typing for Linux
+Description=Undertone - Voice Typing for Linux
 After=graphical-session.target
 PartOf=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart={python_path} -m speaksy.runner
+ExecStart={python_path} -m undertone.runner
 Restart=on-failure
 RestartSec=5
 EnvironmentFile={env_file}
@@ -47,22 +45,20 @@ def install_service() -> bool:
         with open(SERVICE_FILE, "w") as f:
             f.write(service_content)
 
-        # Reload systemd
         subprocess.run(
             ["systemctl", "--user", "daemon-reload"],
             check=True,
             capture_output=True,
         )
 
-        # Enable the service
         subprocess.run(
-            ["systemctl", "--user", "enable", "speaksy.service"],
+            ["systemctl", "--user", "enable", "undertone.service"],
             check=True,
             capture_output=True,
         )
 
         return True
-    except Exception as e:
+    except Exception:
         return False
 
 
@@ -72,7 +68,7 @@ def uninstall_service() -> bool:
         stop_service()
 
         subprocess.run(
-            ["systemctl", "--user", "disable", "speaksy.service"],
+            ["systemctl", "--user", "disable", "undertone.service"],
             capture_output=True,
         )
 
@@ -90,10 +86,10 @@ def uninstall_service() -> bool:
 
 
 def start_service() -> bool:
-    """Start the speaksy service."""
+    """Start the undertone service."""
     try:
         result = subprocess.run(
-            ["systemctl", "--user", "start", "speaksy.service"],
+            ["systemctl", "--user", "start", "undertone.service"],
             capture_output=True,
             text=True,
         )
@@ -103,10 +99,10 @@ def start_service() -> bool:
 
 
 def stop_service() -> bool:
-    """Stop the speaksy service."""
+    """Stop the undertone service."""
     try:
         result = subprocess.run(
-            ["systemctl", "--user", "stop", "speaksy.service"],
+            ["systemctl", "--user", "stop", "undertone.service"],
             capture_output=True,
             text=True,
         )
@@ -116,10 +112,10 @@ def stop_service() -> bool:
 
 
 def restart_service() -> bool:
-    """Restart the speaksy service."""
+    """Restart the undertone service."""
     try:
         result = subprocess.run(
-            ["systemctl", "--user", "restart", "speaksy.service"],
+            ["systemctl", "--user", "restart", "undertone.service"],
             capture_output=True,
             text=True,
         )
@@ -129,10 +125,10 @@ def restart_service() -> bool:
 
 
 def is_running() -> bool:
-    """Check if the speaksy service is running."""
+    """Check if the undertone service is running."""
     try:
         result = subprocess.run(
-            ["systemctl", "--user", "is-active", "speaksy.service"],
+            ["systemctl", "--user", "is-active", "undertone.service"],
             capture_output=True,
             text=True,
         )
@@ -151,7 +147,7 @@ def get_uptime() -> str:
     try:
         result = subprocess.run(
             [
-                "systemctl", "--user", "show", "speaksy.service",
+                "systemctl", "--user", "show", "undertone.service",
                 "--property=ActiveEnterTimestamp",
             ],
             capture_output=True,
@@ -162,9 +158,7 @@ def get_uptime() -> str:
             if "=" in line:
                 timestamp_str = line.split("=", 1)[1].strip()
                 if timestamp_str:
-                    # Parse timestamp and calculate uptime
                     try:
-                        # Format: "Thu 2026-02-05 16:23:51 CST"
                         from dateutil import parser
                         start_time = parser.parse(timestamp_str)
                         delta = datetime.now(start_time.tzinfo) - start_time
@@ -185,7 +179,7 @@ def get_logs(lines: int = 20) -> str:
     try:
         result = subprocess.run(
             [
-                "journalctl", "--user", "-u", "speaksy.service",
+                "journalctl", "--user", "-u", "undertone.service",
                 "-n", str(lines), "--no-pager",
             ],
             capture_output=True,

@@ -24,7 +24,6 @@ build/
 .DS_Store
 Thumbs.db
 
-# Old files (replaced by src/speaksy/)
-voicetype.py
+# Old files
 config.yaml
 requirements.txt

@@ -1,9 +1,11 @@
-"""Core voice typing engine for Speaksy."""
+"""Core voice typing engine for Undertone."""
 
 import io
+import json
 import logging
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -25,7 +27,7 @@ try:
 except ImportError:
     HAS_TRAY = False
 
-log = logging.getLogger("speaksy")
+log = logging.getLogger("undertone")
 
 
 # ---------------------------------------------------------------------------
@@ -196,61 +198,171 @@ def route_transcription(audio_buf, groq, local, config):
 
 
 # ---------------------------------------------------------------------------
-# Text Cleanup (LLM post-processing)
+# Text Cleanup
 # ---------------------------------------------------------------------------
 
-# Filler words to remove (with word boundaries)
 FILLER_PATTERNS = [
     r"\b(um+|uh+|er+|ah+)\b",
-    r"\b(like,?\s+)(?=\w)",  # "like" as filler, not "I like pizza"
+    r"\b(like,?\s+)(?=\w)",
     r"\b(you know,?\s*)",
     r"\b(basically,?\s*)",
-    r"\b(actually,?\s*)(?![\w])",  # "actually" as filler
-    r"\b(so,?\s+)(?=[a-z])",  # "so" at start as filler
+    r"\b(actually,?\s*)(?![\w])",
+    r"\b(so,?\s+)(?=[a-z])",
     r"\b(i mean,?\s*)",
     r"\b(kind of|kinda)\s+",
     r"\b(sort of|sorta)\s+",
 ]
 
+CLEANUP_SYSTEM_PROMPT = (
+    "You are a text formatter. Fix grammar, punctuation, and capitalization "
+    "in the following transcribed speech. Rules:\n"
+    "- Fix grammar errors\n"
+    "- Add proper punctuation (periods, commas, question marks)\n"
+    "- Capitalize sentences and proper nouns\n"
+    "- Remove filler words (um, uh, like, you know, basically, etc.)\n"
+    "- Do NOT add, remove, or rephrase content beyond fixing errors\n"
+    "- Do NOT add explanations or commentary\n"
+    "- Return ONLY the corrected text, nothing else"
+)
+
 
 class TextCleaner:
-    """Clean up transcribed text using simple regex rules."""
+    """Clean up transcribed text using regex + optional LLM grammar fix."""
 
-    def __init__(self, api_key=None, model=None):
-        # API key and model not used - kept for backward compatibility
-        pass
+    CHAT_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+    def __init__(self, api_key=None, model=None, llm_enabled=False):
+        self.api_key = api_key
+        self.model = model or "llama-3.1-8b-instant"
+        self.llm_enabled = llm_enabled and bool(api_key)
+
+    def _regex_clean(self, text):
+        """Stage 1: Fast regex-based filler removal."""
+        cleaned = text
+        for pattern in FILLER_PATTERNS:
+            cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE)
+
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+        if cleaned:
+            cleaned = cleaned[0].upper() + cleaned[1:]
+
+        if cleaned and cleaned[-1] not in ".!?":
+            cleaned += "."
+
+        return cleaned
+
+    def _llm_clean(self, text):
+        """Stage 2: LLM-based grammar and punctuation fix via Groq."""
+        try:
+            resp = httpx.post(
+                self.CHAT_API_URL,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self.model,
+                    "messages": [
+                        {"role": "system", "content": CLEANUP_SYSTEM_PROMPT},
+                        {"role": "user", "content": text},
+                    ],
+                    "temperature": 0.1,
+                    "max_tokens": 1024,
+                },
+                timeout=10.0,
+            )
+            resp.raise_for_status()
+            result = resp.json()["choices"][0]["message"]["content"].strip()
+            # Guard against LLM returning empty or wildly different length text
+            if result and 0.3 < len(result) / max(len(text), 1) < 3.0:
+                return result
+            log.warning("[LLM Cleanup] Result looks suspicious, using regex fallback")
+            return None
+        except Exception as e:
+            log.warning(f"[LLM Cleanup] Failed ({e}), using regex fallback")
+            return None
 
     def clean(self, text):
         if not text:
             return text
 
         original = text
-        cleaned = text
 
-        # Remove filler words
-        for pattern in FILLER_PATTERNS:
-            cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE)
+        if self.llm_enabled:
+            llm_result = self._llm_clean(text)
+            if llm_result:
+                if llm_result != original:
+                    log.info(f'[LLM Cleanup] "{original}" -> "{llm_result}"')
+                return llm_result
 
-        # Clean up multiple spaces
-        cleaned = re.sub(r"\s+", " ", cleaned).strip()
-
-        # Capitalize first letter
-        if cleaned:
-            cleaned = cleaned[0].upper() + cleaned[1:]
-
-        # Add period if no ending punctuation
-        if cleaned and cleaned[-1] not in ".!?":
-            cleaned += "."
-
+        # Fallback: regex-only cleanup
+        cleaned = self._regex_clean(text)
         if cleaned != original:
-            log.info(f'[Cleanup] "{original}" -> "{cleaned}"')
-
+            log.info(f'[Regex Cleanup] "{original}" -> "{cleaned}"')
         return cleaned
 
 
 # ---------------------------------------------------------------------------
-# Text Injection
+# Session Detection & Text Injection
 # ---------------------------------------------------------------------------
+
+
+def detect_session():
+    """Detect display server: 'wayland' or 'x11'."""
+    session = os.environ.get("XDG_SESSION_TYPE", "").lower()
+    if session in ("wayland", "x11"):
+        return session
+    if os.environ.get("WAYLAND_DISPLAY"):
+        return "wayland"
+    if os.environ.get("DISPLAY"):
+        return "x11"
+    return "x11"
+
+
+def _detect_tools():
+    """Pick the right clipboard and key simulation tools for the session."""
+    session = detect_session()
+
+    if session == "wayland":
+        # Clipboard: prefer wl-copy, fall back to xclip (works via XWayland)
+        if shutil.which("wl-copy"):
+            clip_copy = ["wl-copy"]
+            clip_paste = ["wl-paste"]
+        else:
+            clip_copy = ["xclip", "-sel", "clip"]
+            clip_paste = ["xclip", "-sel", "clip", "-o"]
+
+        # Key simulation: prefer wtype (fast), then ydotool, then xdotool
+        if shutil.which("wtype"):
+            key_tool = "wtype"
+        elif shutil.which("ydotool"):
+            key_tool = "ydotool"
+        else:
+            key_tool = "xdotool"
+    else:
+        clip_copy = ["xclip", "-sel", "clip"]
+        clip_paste = ["xclip", "-sel", "clip", "-o"]
+        key_tool = "xdotool"
+
+    return clip_copy, clip_paste, key_tool
+
+
+# Cache detected tools at module level (session doesn't change mid-run)
+_CLIP_COPY, _CLIP_PASTE, _KEY_TOOL = _detect_tools()
+
+
+def _simulate_paste():
+    """Simulate Ctrl+V using the appropriate tool for the session."""
+    if _KEY_TOOL == "wtype":
+        subprocess.run(["wtype", "-M", "ctrl", "v", "-m", "ctrl"], timeout=2)
+    elif _KEY_TOOL == "ydotool":
+        # Raw keycodes: 29=KEY_LEFTCTRL, 47=KEY_V
+        subprocess.run(
+            ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"], timeout=2
+        )
+    else:
+        subprocess.run(["xdotool", "key", "ctrl+v"], timeout=2)
 
 
 def inject_text(text, restore_clipboard=True):
@@ -262,25 +374,23 @@ def inject_text(text, restore_clipboard=True):
     if restore_clipboard:
         try:
             result = subprocess.run(
-                ["xclip", "-sel", "clip", "-o"],
-                capture_output=True,
-                timeout=2,
+                _CLIP_PASTE, capture_output=True, timeout=2,
             )
             if result.returncode == 0:
                 old_clipboard = result.stdout
         except Exception:
             pass
 
-    proc = subprocess.Popen(["xclip", "-sel", "clip"], stdin=subprocess.PIPE)
+    proc = subprocess.Popen(_CLIP_COPY, stdin=subprocess.PIPE)
     proc.communicate(text.encode("utf-8"))
 
     time.sleep(0.05)
-    subprocess.run(["xdotool", "key", "ctrl+v"], timeout=2)
+    _simulate_paste()
     time.sleep(0.1)
 
     if restore_clipboard and old_clipboard is not None:
         time.sleep(0.1)
-        proc = subprocess.Popen(["xclip", "-sel", "clip"], stdin=subprocess.PIPE)
+        proc = subprocess.Popen(_CLIP_COPY, stdin=subprocess.PIPE)
         proc.communicate(old_clipboard)
 
 
@@ -296,10 +406,10 @@ TRAY_COLORS = {
 }
 
 TRAY_TITLES = {
-    "ready": "Speaksy - Ready",
-    "recording": "Speaksy - Recording...",
-    "processing": "Speaksy - Transcribing...",
-    "fallback": "Speaksy - Local Mode",
+    "ready": "Undertone - Ready",
+    "recording": "Undertone - Recording...",
+    "processing": "Undertone - Transcribing...",
+    "fallback": "Undertone - Local Mode",
 }
 
 
@@ -319,12 +429,12 @@ class TrayManager:
 
     def start(self):
         menu = pystray.Menu(
-            pystray.MenuItem("Speaksy", None, enabled=False),
+            pystray.MenuItem("Undertone", None, enabled=False),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Quit", lambda: self._quit()),
         )
         self._icon = pystray.Icon(
-            "speaksy",
+            "undertone",
             _make_circle_icon(TRAY_COLORS["ready"]),
             TRAY_TITLES["ready"],
             menu,
@@ -336,7 +446,7 @@ class TrayManager:
             self._icon.icon = _make_circle_icon(
                 TRAY_COLORS.get(state, TRAY_COLORS["ready"])
             )
-            self._icon.title = TRAY_TITLES.get(state, "Speaksy")
+            self._icon.title = TRAY_TITLES.get(state, "Undertone")
 
     def _quit(self):
         if self._icon:
@@ -410,7 +520,7 @@ class HotkeyManager:
 # ---------------------------------------------------------------------------
 
 
-class SpeaksyEngine:
+class UndertoneEngine:
     """Orchestrates recording, transcription, and text injection."""
 
     def __init__(self, config, api_key=None):
@@ -445,6 +555,7 @@ class SpeaksyEngine:
             self.cleaner = TextCleaner(
                 api_key=self.api_key,
                 model=cleanup_cfg.get("model", "llama-3.1-8b-instant"),
+                llm_enabled=cleanup_cfg.get("llm_enabled", True),
             )
 
         tray_cfg = config.get("tray", {})
@@ -493,7 +604,7 @@ class SpeaksyEngine:
             self._using_fallback = source == "local"
 
             if text:
-                if self.cleaner and not self._using_fallback:
+                if self.cleaner:
                     text = self.cleaner.clean(text)
 
                 text_cfg = self.config.get("text_injection", {})
@@ -518,8 +629,11 @@ class SpeaksyEngine:
 
         self.hotkeys.start()
 
+        session = detect_session()
+        log.info(f"Session: {session} | clipboard: {_CLIP_COPY[0]} | keys: {_KEY_TOOL}")
+
         api_status = "configured" if self.api_key else "NOT SET (local only)"
-        log.info(f"Speaksy ready. API key: {api_status}")
+        log.info(f"Undertone ready. API key: {api_status}")
 
         hotkey_cfg = self.config.get("hotkeys", {})
         ptt = hotkey_cfg.get("push_to_talk", "Key.ctrl_r")

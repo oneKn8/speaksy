@@ -1,4 +1,4 @@
-"""Interactive setup wizard for Speaksy."""
+"""Interactive setup wizard for Undertone."""
 
 import shutil
 import subprocess
@@ -8,18 +8,31 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 
-from speaksy import config
-from speaksy import service
+from undertone import config
+from undertone import service
+from undertone.core import detect_session
 
 console = Console()
 
 
 def check_system_deps() -> dict:
     """Check if required system dependencies are installed."""
-    deps = {
-        "xclip": shutil.which("xclip") is not None,
-        "xdotool": shutil.which("xdotool") is not None,
-    }
+    session = detect_session()
+    deps = {}
+
+    if session == "wayland":
+        # Clipboard: wl-copy (preferred) or xclip via XWayland
+        deps["wl-clipboard"] = shutil.which("wl-copy") is not None
+        # Key simulation: wtype (wlroots) or ydotool (all) or xdotool (XWayland)
+        has_key_tool = (
+            shutil.which("wtype") is not None
+            or shutil.which("ydotool") is not None
+            or shutil.which("xdotool") is not None
+        )
+        deps["key-sim (wtype/ydotool/xdotool)"] = has_key_tool
+    else:
+        deps["xclip"] = shutil.which("xclip") is not None
+        deps["xdotool"] = shutil.which("xdotool") is not None
 
     # Check audio
     try:
@@ -37,10 +50,17 @@ def install_missing_deps(missing: list) -> bool:
     console.print("\n[yellow]trying to install missing deps...[/yellow]")
 
     apt_packages = []
-    if "xclip" in missing:
-        apt_packages.append("xclip")
-    if "xdotool" in missing:
-        apt_packages.append("xdotool")
+    for dep in missing:
+        if dep == "xclip":
+            apt_packages.append("xclip")
+        elif dep == "xdotool":
+            apt_packages.append("xdotool")
+        elif dep == "wl-clipboard":
+            apt_packages.append("wl-clipboard")
+        elif "key-sim" in dep:
+            # Install wtype (works on wlroots) and ydotool (works everywhere)
+            apt_packages.append("wtype")
+            apt_packages.append("ydotool")
 
     if apt_packages:
         try:
@@ -83,7 +103,12 @@ def run_setup():
     console.print()
     console.print("[bold cyan]aight let's get you set up real quick[/bold cyan]")
     console.print()
-    console.print("[dim]" + "━" * 40 + "[/dim]")
+    console.print("[dim]" + "-" * 40 + "[/dim]")
+    console.print()
+
+    # Detect session
+    session = detect_session()
+    console.print(f"[bold]display server:[/bold] [cyan]{session}[/cyan]")
     console.print()
 
     # Check system deps
@@ -93,9 +118,9 @@ def run_setup():
     all_good = True
     for dep, found in deps.items():
         if found:
-            console.print(f"   [green]├─ {dep}: found ✓[/green]")
+            console.print(f"   [green]|- {dep}: found[/green]")
         else:
-            console.print(f"   [red]├─ {dep}: missing ✗[/red]")
+            console.print(f"   [red]|- {dep}: missing[/red]")
             all_good = False
 
     if not all_good:
@@ -140,7 +165,7 @@ def run_setup():
         valid, error = validate_api_key(api_key)
 
         if valid:
-            console.print("[green]we're in ✓[/green]")
+            console.print("[green]we're in[/green]")
             break
         else:
             console.print(f"[red]nah that ain't it[/red]")
@@ -170,7 +195,7 @@ def run_setup():
         )
 
         config.set_hotkeys(ptt, toggle)
-        console.print("   [green]locked in ✓[/green]")
+        console.print("   [green]locked in[/green]")
     else:
         # Save default config
         cfg = config.load_config()
@@ -181,22 +206,22 @@ def run_setup():
     # Install service
     console.print("[bold]installing service...[/bold]")
     if service.install_service():
-        console.print("   [green]└─ auto-start on login: enabled ✓[/green]")
+        console.print("   [green]'- auto-start on login: enabled[/green]")
     else:
-        console.print("   [red]└─ failed to install service[/red]")
+        console.print("   [red]'- failed to install service[/red]")
         return False
 
     # Start service
     console.print()
-    console.print("[dim]starting speaksy...[/dim]")
+    console.print("[dim]starting undertone...[/dim]")
     if service.start_service():
-        console.print("[green]service started ✓[/green]")
+        console.print("[green]service started[/green]")
     else:
         console.print("[red]failed to start service[/red]")
         return False
 
     console.print()
-    console.print("[dim]" + "━" * 40 + "[/dim]")
+    console.print("[dim]" + "-" * 40 + "[/dim]")
     console.print()
 
     # Success message
@@ -209,8 +234,8 @@ def run_setup():
     console.print(f"   [cyan]hold {ptt_display}[/cyan] = push-to-talk")
     console.print(f"   [cyan]tap {toggle_display}[/cyan] = toggle on/off")
     console.print()
-    console.print("[dim]speaksy is now running in the background[/dim]")
-    console.print("[dim]just start talking wherever you type ✨[/dim]")
+    console.print("[dim]undertone is now running in the background[/dim]")
+    console.print("[dim]just start talking wherever you type[/dim]")
     console.print()
 
     return True

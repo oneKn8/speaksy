@@ -1,4 +1,4 @@
-"""Configuration management for Speaksy."""
+"""Configuration management for Undertone."""
 
 import os
 from pathlib import Path
@@ -6,7 +6,7 @@ from pathlib import Path
 import yaml
 
 # XDG config directory
-CONFIG_DIR = Path.home() / ".config" / "speaksy"
+CONFIG_DIR = Path.home() / ".config" / "undertone"
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
 ENV_FILE = CONFIG_DIR / ".env"
 
@@ -21,6 +21,7 @@ DEFAULT_CONFIG = {
     },
     "cleanup": {
         "enabled": True,
+        "llm_enabled": True,
         "model": "llama-3.1-8b-instant",
     },
     "audio": {
@@ -106,7 +107,7 @@ def api_key_exists() -> bool:
 
 
 def is_configured() -> bool:
-    """Check if speaksy is fully configured."""
+    """Check if undertone is fully configured."""
     return config_exists() and api_key_exists()
 
 
@@ -154,4 +155,19 @@ def set_cleanup_enabled(enabled: bool):
     if "cleanup" not in config:
         config["cleanup"] = {}
     config["cleanup"]["enabled"] = enabled
+    save_config(config)
+
+
+def get_cleanup_llm_enabled() -> bool:
+    """Check if LLM-based text cleanup is enabled."""
+    config = load_config()
+    return config.get("cleanup", {}).get("llm_enabled", True)
+
+
+def set_cleanup_llm_enabled(enabled: bool):
+    """Enable or disable LLM-based text cleanup."""
+    config = load_config()
+    if "cleanup" not in config:
+        config["cleanup"] = {}
+    config["cleanup"]["llm_enabled"] = enabled
     save_config(config)
