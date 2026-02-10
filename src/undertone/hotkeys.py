@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from typing import TypeAlias
 
 from pynput import keyboard
 
 log = logging.getLogger("undertone")
 
-KeyType = keyboard.Key | keyboard.KeyCode
+KeyType: TypeAlias = keyboard.Key | keyboard.KeyCode
 
 
 def _parse_key(key_str: str) -> KeyType:

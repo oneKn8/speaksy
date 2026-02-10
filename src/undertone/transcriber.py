@@ -69,7 +69,7 @@ class GroqTranscriber:
                     continue
 
                 resp.raise_for_status()
-                return resp.json()["text"].strip()
+                return str(resp.json()["text"]).strip()
 
             except httpx.TimeoutException as e:
                 last_exc = e
@@ -142,6 +142,7 @@ class LocalTranscriber:
             tmp_path = tmp.name
 
         try:
+            assert self._model is not None
             segments, _ = self._model.transcribe(tmp_path, vad_filter=True)
             return " ".join(seg.text for seg in segments).strip()
         finally:

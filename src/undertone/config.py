@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import TypedDict
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 # XDG config directory
 CONFIG_DIR = Path.home() / ".config" / "undertone"
@@ -210,7 +210,7 @@ def set_privacy_mode(mode: str) -> None:
 def get_cleanup_enabled() -> bool:
     """Check if text cleanup is enabled."""
     config = load_config()
-    return config.get("cleanup", {}).get("enabled", True)
+    return bool(config.get("cleanup", {}).get("enabled", True))
 
 
 def set_cleanup_enabled(enabled: bool) -> None:
@@ -225,7 +225,7 @@ def set_cleanup_enabled(enabled: bool) -> None:
 def get_cleanup_llm_enabled() -> bool:
     """Check if LLM-based text cleanup is enabled."""
     config = load_config()
-    return config.get("cleanup", {}).get("llm_enabled", True)
+    return bool(config.get("cleanup", {}).get("llm_enabled", True))
 
 
 def set_cleanup_llm_enabled(enabled: bool) -> None:
@@ -240,7 +240,7 @@ def set_cleanup_llm_enabled(enabled: bool) -> None:
 def get_sound_feedback() -> bool:
     """Check if sound feedback is enabled."""
     config = load_config()
-    return config.get("audio", {}).get("sound_feedback", True)
+    return bool(config.get("audio", {}).get("sound_feedback", True))
 
 
 def set_sound_feedback(enabled: bool) -> None:
@@ -255,7 +255,7 @@ def set_sound_feedback(enabled: bool) -> None:
 def get_language() -> str:
     """Get current STT language."""
     config = load_config()
-    return config.get("stt", {}).get("language", "en")
+    return str(config.get("stt", {}).get("language", "en"))
 
 
 def set_language(language: str) -> None:
@@ -270,7 +270,7 @@ def set_language(language: str) -> None:
 def get_whisper_prompt() -> str:
     """Get the Whisper prompt hint (helps with accents/vocabulary)."""
     config = load_config()
-    return config.get("stt", {}).get("prompt", "")
+    return str(config.get("stt", {}).get("prompt", ""))
 
 
 def set_whisper_prompt(prompt: str) -> None:

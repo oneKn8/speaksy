@@ -162,7 +162,7 @@ def get_uptime() -> str:
                 timestamp_str = line.split("=", 1)[1].strip()
                 if timestamp_str:
                     try:
-                        from dateutil import parser
+                        from dateutil import parser  # type: ignore[import-untyped]
 
                         start_time = parser.parse(timestamp_str)
                         delta = datetime.now(start_time.tzinfo) - start_time

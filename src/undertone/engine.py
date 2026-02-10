@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import io
 import logging
 import os
 import signal
@@ -23,7 +24,7 @@ log = logging.getLogger("undertone")
 class UndertoneEngine:
     """Orchestrates recording, transcription, and text injection."""
 
-    def __init__(self, config: dict, api_key: str | None = None) -> None:
+    def __init__(self, config: dict, api_key: str = "") -> None:
         self.config = config
         self.api_key = api_key or os.getenv("GROQ_API_KEY", "")
         self._recording = False
@@ -107,7 +108,7 @@ class UndertoneEngine:
             self.tray.set_state("processing")
         threading.Thread(target=self._transcribe_and_type, args=(audio_buf,), daemon=True).start()
 
-    def _transcribe_and_type(self, audio_buf: object) -> None:
+    def _transcribe_and_type(self, audio_buf: io.BytesIO) -> None:
         try:
             text, source = route_transcription(
                 audio_buf,

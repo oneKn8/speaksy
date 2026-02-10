@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from typing import Any
 
 from PIL import Image, ImageDraw
 
@@ -45,7 +46,7 @@ class TrayManager:
 
     def __init__(self, on_quit: Callable[[], None]) -> None:
         self.on_quit = on_quit
-        self._icon: object | None = None
+        self._icon: Any = None
 
     def start(self) -> None:
         """Start the system tray icon (blocking)."""
